@@ -20,7 +20,7 @@ import pandas as pd
 from torch.optim import Adam
 from tqdm import tqdm
 
-from src.model import TwoTower, TwoTowerTrainTask, build_ebc, make_kjt
+from src.model import TwoTower, TwoTowerTrainTask, build_ebc, make_kjt, make_optimizer
 from src.train import train
 
 
@@ -220,7 +220,7 @@ def run_dlattack(
         # Retrain surrogate
         print(f"  Retraining surrogate on {len(poisoned_train)} interactions...")
         surr_task = TwoTowerTrainTask(surrogate)
-        surr_optimizer = Adam(surr_task.parameters(), lr=lr)
+        surr_optimizer = make_optimizer(surr_task, lr=lr)
         train(
             surr_task, surr_optimizer, poisoned_train, n_items,
             epochs=retrain_epochs, batch_size=2048,
@@ -257,7 +257,7 @@ def run_dlattack(
 
         print(f"  Retraining main model on poisoned data...")
         model = TwoTowerTrainTask(new_two_tower)
-        optimizer = Adam(model.parameters(), lr=lr)
+        optimizer = make_optimizer(model, lr=lr)
         train(model, optimizer, poisoned_train, n_items,
               epochs=retrain_epochs, batch_size=2048,
               device=device, eval_fn=None, save_path=None)

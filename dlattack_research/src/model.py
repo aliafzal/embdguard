@@ -2,12 +2,17 @@
 TorchRec-native Two-Tower recommender model.
 
 Architecture:
-  EBC -> TwoTower -> TwoTowerTrainTask + Adam(model.parameters())
+  EBC -> TwoTower -> TwoTowerTrainTask + make_optimizer()
 
   Single EBC with two tables (user, item)
   User tower: EBC["user_id"] -> MLP -> L2-normalized vector
   Item tower: EBC["item_id"] -> MLP -> L2-normalized vector
   Score:      dot product of normalized towers
+
+Optimizer: Adam with parameter groups — embedding_lr=0.1 for EBC params,
+  lr=0.001 for MLP params. Embeddings are sparse (each row only gets
+  gradients when that user/item appears in the batch), so they need a
+  much higher LR than the dense MLP layers.
 """
 import torch
 import torch.nn as nn
@@ -47,12 +52,17 @@ def build_ebc(
 def make_kjt(user_ids: torch.Tensor, item_ids: torch.Tensor) -> KeyedJaggedTensor:
     """Build a KeyedJaggedTensor from user and item ID tensors.
 
-    Each ID is a single-element bag (length=1), so lengths is all ones.
+    Each ID is a single-element bag (length=1), so lengths is all ones
+    and offsets is [0, 1, 2, ...]. We provide offsets directly to avoid
+    the fbgemm cumsum kernel (not available on macOS).
     """
+    n = len(user_ids)
+    values = torch.cat([user_ids, item_ids])
+    offsets = torch.arange(2 * n + 1, dtype=torch.long, device=user_ids.device)
     return KeyedJaggedTensor(
         keys=["user_id", "item_id"],
-        values=torch.cat([user_ids, item_ids]),
-        lengths=torch.ones(len(user_ids) * 2, dtype=torch.long, device=user_ids.device),
+        values=values,
+        offsets=offsets,
     )
 
 
@@ -81,7 +91,10 @@ class TwoTower(nn.Module):
             device = torch.device("cpu")
 
         self.ebc = ebc
-        embedding_dim = ebc.embedding_bag_configs()[0].embedding_dim
+        configs = ebc.embedding_bag_configs
+        if callable(configs):
+            configs = configs()
+        embedding_dim = configs[0].embedding_dim
         self.user_proj = _build_mlp(embedding_dim, layer_sizes).to(device)
         self.item_proj = _build_mlp(embedding_dim, layer_sizes).to(device)
 
@@ -114,6 +127,24 @@ class TwoTower(nn.Module):
         with torch.no_grad():
             self.ebc.embedding_bags["t_user_id"].weight[:old_n_users] = old_weight
             self.ebc.embedding_bags["t_item_id"].weight.copy_(old_item_weight)
+
+
+def make_optimizer(model, lr=0.001, embedding_lr=0.1):
+    """Create Adam with separate LRs for embeddings (high) and MLPs (normal).
+
+    Embeddings are sparse — each row only gets gradients when that user/item
+    appears in the batch — so they need a much higher LR than the dense MLP
+    layers to learn effectively.
+    """
+    from torch.optim import Adam
+    two_tower = model.two_tower if hasattr(model, "two_tower") else model
+    ebc_params = list(two_tower.ebc.parameters())
+    mlp_params = (list(two_tower.user_proj.parameters()) +
+                  list(two_tower.item_proj.parameters()))
+    return Adam([
+        {"params": ebc_params, "lr": embedding_lr},
+        {"params": mlp_params, "lr": lr},
+    ])
 
 
 class TwoTowerTrainTask(nn.Module):

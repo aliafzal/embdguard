@@ -1,9 +1,8 @@
 # test_train.py
 import torch
 import os
-from torch.optim import Adam
 from src.dataset import download_ml1m, load_ratings, split_data
-from src.model import build_ebc, TwoTower, TwoTowerTrainTask
+from src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_optimizer
 from src.train import train
 from src.evaluate import evaluate
 
@@ -25,7 +24,7 @@ test_small = test_df[test_df["user_id"].isin(small_users)]
 ebc = build_ebc(n_users, n_items, embedding_dim=64, device=device)
 two_tower = TwoTower(ebc, layer_sizes=[128, 64], device=device)
 model = TwoTowerTrainTask(two_tower)
-optimizer = Adam(model.parameters(), lr=0.001)
+optimizer = make_optimizer(model)
 
 # Wrap eval function
 eval_fn = lambda m: evaluate(m, test_small, train_small, n_items, n_neg=99, k=10, device=str(device))

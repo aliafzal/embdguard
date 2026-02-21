@@ -3,9 +3,8 @@ Runs the entire pipeline end-to-end on a tiny subset (300 users, 2 attack rounds
 to confirm no crashes before running the full experiment.
 """
 import torch, pandas as pd, os
-from torch.optim import Adam
 from src.dataset import download_ml1m, load_ratings, split_data
-from src.model import build_ebc, TwoTower, TwoTowerTrainTask
+from src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_optimizer
 from src.train import train
 from src.attack import run_dlattack
 from src.evaluate import evaluate, target_item_hit_ratio
@@ -29,7 +28,7 @@ test_small = test_df[test_df["user_id"].isin(small_uids)]
 ebc = build_ebc(n_users, n_items, embedding_dim=32, device=device)
 two_tower = TwoTower(ebc, layer_sizes=[128, 64], device=device)
 model = TwoTowerTrainTask(two_tower)
-optimizer = Adam(model.parameters(), lr=0.001)
+optimizer = make_optimizer(model)
 
 eval_fn = lambda m: evaluate(m, test_small, train_small, n_items, n_neg=50, k=10, device=str(device))
 

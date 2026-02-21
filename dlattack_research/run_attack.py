@@ -1,8 +1,7 @@
 """Execute full DLAttack."""
 import torch, json, os
-from torch.optim import Adam
 from src.dataset import load_ratings, split_data
-from src.model import build_ebc, TwoTower, TwoTowerTrainTask
+from src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_optimizer
 from src.attack import run_dlattack
 from src.evaluate import evaluate
 
@@ -21,7 +20,7 @@ model = TwoTowerTrainTask(two_tower)
 
 state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
 model.load_state_dict(state, strict=False)
-optimizer = Adam(model.parameters(), lr=0.001)
+optimizer = make_optimizer(model)
 print("Loaded baseline model.")
 
 # Choose target item: use a mid-popularity item for realistic attack

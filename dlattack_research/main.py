@@ -9,9 +9,8 @@ Usage:
   python main.py --phase evaluate     # only evaluate (requires both checkpoints)
 """
 import argparse, json, os, torch
-from torch.optim import Adam
 from src.dataset import download_ml1m, load_ratings, split_data
-from src.model import build_ebc, TwoTower, TwoTowerTrainTask
+from src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_optimizer
 from src.train import train
 from src.attack import run_dlattack
 from src.evaluate import evaluate, target_item_hit_ratio
@@ -29,7 +28,7 @@ def _build_model(n_users, n_items, embed_dim, layer_sizes, device, lr):
     ebc = build_ebc(n_users, n_items, embed_dim, device=device)
     two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
     model = TwoTowerTrainTask(two_tower)
-    optimizer = Adam(model.parameters(), lr=lr)
+    optimizer = make_optimizer(model, lr=lr)
     return model, optimizer
 
 
@@ -93,7 +92,7 @@ def main():
         model = TwoTowerTrainTask(two_tower)
         state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
         model.load_state_dict(state, strict=False)
-        optimizer = Adam(model.parameters(), lr=args.lr)
+        optimizer = make_optimizer(model, lr=args.lr)
 
         target = get_target_item(train_df)
         eval_fn = lambda m: evaluate(m, test_df, train_df, n_items, n_neg=99, k=10, device=str(device))
