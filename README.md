@@ -53,6 +53,10 @@ guard.detach()
 
 The `AccessFrequencyDetector` fires at step 33 when the target item's access count crosses 5x the mean — 8 steps after poisoning begins.
 
+![Training loss and detection timeline](demo_plot.png)
+
+**Top**: training loss drops sharply once poisoned data is injected (step 26) — the model overfits to the fake interactions. **Bottom**: each red bar is an alert from the `AccessFrequencyDetector`. The concentration ratio (how many times more the target item is accessed vs the average item) starts at 5.5x and climbs to 12.8x, well above the 5.0x threshold (orange dashed line).
+
 ## Logging
 
 With `log_path` set, EmbdGuard writes JSONL — one line per event:
