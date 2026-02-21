@@ -95,7 +95,8 @@ def main():
 
         results, poisoned, dmp_model, dense_optimizer = run_dlattack(
             dmp_model, dense_optimizer, train_df, test_df, n_users, n_items,
-            target_item_id=target, rounds=args.rounds, m=args.m,
+            target_item_id=target, embedding_dim=args.embed_dim,
+            layer_sizes=layer_sizes, rounds=args.rounds, m=args.m,
             lr=args.lr, device=str(device), eval_fn=eval_fn,
         )
         torch.save(extract_state_dict(dmp_model), "checkpoints/attacked_model.pt")

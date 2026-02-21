@@ -44,7 +44,8 @@ train(dmp_model, dense_optimizer, train_small, n_items,
 target = int(train_small["item_id"].value_counts().index[5])
 results, poisoned, dmp_model, dense_optimizer = run_dlattack(
     dmp_model, dense_optimizer, train_small, test_small, n_users, n_items,
-    target_item_id=target, rounds=2, m=2,
+    target_item_id=target, embedding_dim=32, layer_sizes=[128, 64],
+    rounds=2, m=2,
     n_filler=10, n_optim_steps=50, retrain_epochs=3,
     lr=0.001, device=str(device),
     eval_fn=eval_fn,
