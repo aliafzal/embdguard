@@ -48,6 +48,8 @@ def train(dmp_model, dense_optimizer, train_df, n_items, epochs=20,
         eval_fn: optional evaluation callback
     """
     history = []
+    print(f"  Training: {len(train_df)} interactions, epochs={epochs}, "
+          f"batch={batch_size}, n_neg={n_neg}")
 
     # Move positive interactions to device once
     pos_users = torch.tensor(train_df["user_id"].values, dtype=torch.long, device=device)

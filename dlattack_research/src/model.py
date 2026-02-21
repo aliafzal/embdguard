@@ -124,15 +124,24 @@ class TwoTower(nn.Module):
 
 
 class TwoTowerTrainTask(nn.Module):
-    """Wraps TwoTower with BCEWithLogitsLoss for training."""
+    """Wraps TwoTower with BCEWithLogitsLoss for training.
 
-    def __init__(self, two_tower: TwoTower):
+    Args:
+        logit_temp: Temperature scaling for dot-product logits. Since embeddings
+            are L2-normalized, raw dot products lie in [-1, 1], which constrains
+            sigmoid to [0.27, 0.73] — too narrow for BCE to produce strong
+            gradients. Multiplying by temperature stretches logits to
+            [-temp, temp], giving the model full dynamic range.
+    """
+
+    def __init__(self, two_tower: TwoTower, logit_temp: float = 10.0):
         super().__init__()
         self.two_tower = two_tower
         self.loss_fn = nn.BCEWithLogitsLoss()
+        self.logit_temp = logit_temp
 
     def forward(self, kjt: KeyedJaggedTensor, labels: torch.Tensor):
         user_emb, item_emb = self.two_tower(kjt)
-        logits = (user_emb * item_emb).sum(dim=1)
+        logits = (user_emb * item_emb).sum(dim=1) * self.logit_temp
         loss = self.loss_fn(logits, labels)
         return loss, (loss.detach(), logits.detach(), labels.detach())

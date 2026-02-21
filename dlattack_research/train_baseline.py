@@ -26,7 +26,7 @@ eval_fn = lambda m: evaluate(m, test_df, train_df, n_items, n_neg=99, k=10, devi
 
 print(f"\n=== Baseline Training | Users={n_users} Items={n_items} ===")
 history = train(dmp_model, dense_optimizer, train_df, n_items,
-                epochs=30, batch_size=2048, n_neg=4,
+                epochs=50, batch_size=4096, n_neg=4,
                 device=str(device), eval_fn=eval_fn,
                 save_path="checkpoints/baseline.pt")
 
