@@ -60,16 +60,34 @@ def _deshard_state_dict(state):
 
 
 def _copy_weights_to_plain(dmp_model, plain_two_tower):
-    """Copy weights from DMP-wrapped model to a plain TwoTower via state_dict."""
+    """Copy weights from DMP-wrapped model to a plain TwoTower via state_dict.
+
+    Handles size mismatches for embedding tables (e.g., when the target model
+    has been expanded with extra user rows for fake users). For mismatched
+    shapes, copies the overlapping portion.
+    """
     src_state = _deshard_state_dict(extract_state_dict(dmp_model))
     tt_state = {}
     for k, v in src_state.items():
         if k.startswith("two_tower."):
             tt_state[k[len("two_tower."):]] = v
-    if tt_state:
-        plain_two_tower.load_state_dict(tt_state, strict=False)
-    else:
-        plain_two_tower.load_state_dict(src_state, strict=False)
+    if not tt_state:
+        tt_state = src_state
+
+    dst_state = plain_two_tower.state_dict()
+    for k, src_v in tt_state.items():
+        if k not in dst_state:
+            continue
+        dst_v = dst_state[k]
+        if src_v.shape == dst_v.shape:
+            dst_state[k] = src_v
+        else:
+            # Size mismatch (e.g., expanded user embedding table).
+            # Copy the overlapping region.
+            slices = tuple(slice(0, min(s, d)) for s, d in zip(src_v.shape, dst_v.shape))
+            dst_state[k] = dst_v.clone()
+            dst_state[k][slices] = src_v[slices]
+    plain_two_tower.load_state_dict(dst_state, strict=False)
 
 
 def _build_surrogate_from_dmp(dmp_model, n_users, n_items, embedding_dim, layer_sizes, device):
