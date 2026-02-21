@@ -55,8 +55,10 @@ assert "round_0_clean" in results, "Missing pre-attack metrics"
 assert "round_1" in results, "Missing round 1 metrics"
 assert "round_2" in results, "Missing round 2 metrics"
 
-# Detection
-two_tower = unwrap_model(dmp_model)
+# Detection — build plain TwoTower for detection (avoids ShardedEBC access issues)
+from src.attack import _build_surrogate_from_dmp
+max_uid = int(poisoned["user_id"].max()) + 1
+two_tower = _build_surrogate_from_dmp(dmp_model, max_uid, n_items, 32, [128, 64], str(device))
 flagged = detect_fake_users(poisoned, two_tower, target, n_items)
 fake_ids = set(poisoned[poisoned["user_id"] >= n_users]["user_id"].unique())
 print(f"\nFake users: {fake_ids}")

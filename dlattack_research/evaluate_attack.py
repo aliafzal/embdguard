@@ -16,9 +16,12 @@ target_item = attack_meta["target_item"]
 
 def _load_two_tower(ckpt_path):
     """Load a plain TwoTower from a TwoTowerTrainTask checkpoint."""
+    from src.distributed import deshard_state_dict
     ebc = build_ebc(n_users, n_items, embedding_dim=64, device=device)
     tt = TwoTower(ebc, layer_sizes=[128, 64], device=device)
-    state = torch.load(ckpt_path, map_location=device, weights_only=False)
+    state = deshard_state_dict(
+        torch.load(ckpt_path, map_location=device, weights_only=False)
+    )
     tt_state = {}
     for k, v in state.items():
         if k.startswith("two_tower."):

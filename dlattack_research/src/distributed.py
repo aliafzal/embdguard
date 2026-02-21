@@ -88,6 +88,28 @@ def unwrap_model(dmp_model) -> TwoTower:
     return dmp_model.module.two_tower
 
 
+def deshard_state_dict(state: dict) -> dict:
+    """Convert any ShardedTensor values in a state dict to regular tensors.
+
+    After DMP wrapping, embedding parameters become ShardedTensors.
+    For single-GPU, each ShardedTensor has one local shard containing the
+    full tensor. This function extracts those regular tensors so that
+    state dicts can be saved/loaded with plain torch.save/load.
+    """
+    from torch.distributed._shard.sharded_tensor import ShardedTensor
+    clean = {}
+    for k, v in state.items():
+        if isinstance(v, ShardedTensor):
+            clean[k] = v.local_shards()[0].tensor
+        else:
+            clean[k] = v
+    return clean
+
+
 def extract_state_dict(dmp_model) -> dict:
-    """Get the state dict from the inner module for checkpointing."""
-    return dmp_model.module.state_dict()
+    """Get the state dict from the inner module for checkpointing.
+
+    Automatically deshards ShardedTensors to regular tensors so that
+    checkpoints are portable and can be loaded into plain (non-DMP) models.
+    """
+    return deshard_state_dict(dmp_model.module.state_dict())

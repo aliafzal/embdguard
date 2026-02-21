@@ -36,9 +36,12 @@ def _build_dmp_model(n_users, n_items, embed_dim, layer_sizes, device, lr):
 
 def _load_plain_two_tower(n_users, n_items, embed_dim, layer_sizes, device, ckpt_path):
     """Load a plain TwoTower from checkpoint (for evaluation without DMP)."""
+    from src.distributed import deshard_state_dict
     ebc = build_ebc(n_users, n_items, embed_dim, device=device)
     two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
-    state = torch.load(ckpt_path, map_location=device, weights_only=False)
+    state = deshard_state_dict(
+        torch.load(ckpt_path, map_location=device, weights_only=False)
+    )
     # The checkpoint is from TwoTowerTrainTask, so filter for two_tower keys
     tt_state = {}
     for k, v in state.items():

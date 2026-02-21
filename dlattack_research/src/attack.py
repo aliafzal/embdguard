@@ -46,9 +46,22 @@ def _build_plain_two_tower(n_users, n_items, embedding_dim, layer_sizes, device)
     return TwoTower(ebc, layer_sizes=layer_sizes, device=torch.device(device))
 
 
+def _deshard_state_dict(state):
+    """Convert any ShardedTensor values in a state dict to regular tensors."""
+    from torch.distributed._shard.sharded_tensor import ShardedTensor
+    clean = {}
+    for k, v in state.items():
+        if isinstance(v, ShardedTensor):
+            # Single-GPU: one local shard contains the full tensor
+            clean[k] = v.local_shards()[0].tensor
+        else:
+            clean[k] = v
+    return clean
+
+
 def _copy_weights_to_plain(dmp_model, plain_two_tower):
     """Copy weights from DMP-wrapped model to a plain TwoTower via state_dict."""
-    src_state = extract_state_dict(dmp_model)
+    src_state = _deshard_state_dict(extract_state_dict(dmp_model))
     tt_state = {}
     for k, v in src_state.items():
         if k.startswith("two_tower."):
