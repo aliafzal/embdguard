@@ -10,7 +10,7 @@ from src.train import train
 from src.attack import run_dlattack
 from src.evaluate import evaluate, target_item_hit_ratio
 from src.detect import detect_fake_users
-from src.distributed import init_process_group, wrap_with_dmp, unwrap_model
+from src.distributed import init_process_group, wrap_with_dmp
 
 os.makedirs("checkpoints", exist_ok=True)
 os.makedirs("results", exist_ok=True)

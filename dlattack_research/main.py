@@ -16,7 +16,7 @@ from src.attack import run_dlattack
 from src.evaluate import evaluate, target_item_hit_ratio
 from src.detect import detect_fake_users
 from src.distributed import (
-    init_process_group, wrap_with_dmp, unwrap_model, extract_state_dict,
+    init_process_group, wrap_with_dmp, extract_state_dict,
 )
 
 
@@ -34,23 +34,29 @@ def _build_dmp_model(n_users, n_items, embed_dim, layer_sizes, device, lr):
     return wrap_with_dmp(train_task, device, lr=lr)
 
 
-def _load_plain_two_tower(n_users, n_items, embed_dim, layer_sizes, device, ckpt_path):
-    """Load a plain TwoTower from checkpoint (for evaluation without DMP)."""
+def _load_plain_two_tower(embed_dim, layer_sizes, device, ckpt_path):
+    """Load a plain TwoTower from checkpoint (for evaluation without DMP).
+
+    Infers user/item counts from checkpoint tensor shapes so it works for
+    both clean (n_users) and attacked (n_users + fake_users) checkpoints.
+    """
     from src.distributed import deshard_state_dict
-    ebc = build_ebc(n_users, n_items, embed_dim, device=device)
-    two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
     state = deshard_state_dict(
         torch.load(ckpt_path, map_location=device, weights_only=False)
     )
-    # The checkpoint is from TwoTowerTrainTask, so filter for two_tower keys
+    # Strip two_tower. prefix if present (checkpoint is from TwoTowerTrainTask)
     tt_state = {}
     for k, v in state.items():
         if k.startswith("two_tower."):
             tt_state[k[len("two_tower."):]] = v
     if tt_state:
-        two_tower.load_state_dict(tt_state, strict=False)
-    else:
-        two_tower.load_state_dict(state, strict=False)
+        state = tt_state
+    # Infer dimensions from embedding weight shapes
+    ckpt_n_users = state["ebc.embedding_bags.t_user_id.weight"].shape[0]
+    ckpt_n_items = state["ebc.embedding_bags.t_item_id.weight"].shape[0]
+    ebc = build_ebc(ckpt_n_users, ckpt_n_items, embed_dim, device=device)
+    two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
+    two_tower.load_state_dict(state, strict=False)
     return two_tower
 
 
@@ -86,12 +92,18 @@ def main():
               save_path="checkpoints/baseline.pt")
 
     if args.phase in ("all", "attack"):
-        dmp_model, dense_optimizer = _build_dmp_model(
-            n_users, n_items, args.embed_dim, layer_sizes, device, args.lr
+        # Build on real device (not meta) so we can load checkpoint before DMP wrapping
+        from src.distributed import deshard_state_dict
+        ebc = build_ebc(n_users, n_items, args.embed_dim, device=device)
+        two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
+        train_task = TwoTowerTrainTask(two_tower)
+        # Load baseline weights into plain model
+        state = deshard_state_dict(
+            torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
         )
-        # Load baseline weights
-        state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
-        dmp_model.module.load_state_dict(state)
+        train_task.load_state_dict(state, strict=False)
+        # Now wrap with DMP (preserves loaded weights)
+        dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=args.lr)
 
         target = get_target_item(train_df)
         eval_fn = lambda m: evaluate(m, test_df, train_df, n_items, n_neg=99, k=10, device=str(device))
@@ -112,13 +124,14 @@ def main():
         with open("results/attack_results.json") as f:
             meta = json.load(f)
         target = meta["target_item"]
-        poisoned = __import__("pandas").read_csv("results/poisoned_train.csv")
+        import pandas as pd
+        poisoned = pd.read_csv("results/poisoned_train.csv")
 
         clean_tt = _load_plain_two_tower(
-            n_users, n_items, args.embed_dim, layer_sizes, device, "checkpoints/baseline.pt"
+            args.embed_dim, layer_sizes, device, "checkpoints/baseline.pt"
         )
         attacked_tt = _load_plain_two_tower(
-            n_users, n_items, args.embed_dim, layer_sizes, device, "checkpoints/attacked_model.pt"
+            args.embed_dim, layer_sizes, device, "checkpoints/attacked_model.pt"
         )
 
         print("\n=== Final Evaluation ===")

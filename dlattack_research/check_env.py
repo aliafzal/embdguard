@@ -15,7 +15,6 @@ check("fbgemm_gpu",   lambda: __import__("fbgemm_gpu"))
 check("pandas",       lambda: __import__("pandas"))
 check("numpy",        lambda: __import__("numpy"))
 check("sklearn",      lambda: __import__("sklearn"))
-check("faiss",        lambda: __import__("faiss"))
 check("tqdm",         lambda: __import__("tqdm"))
 
 # Verify key TorchRec DMP imports

@@ -15,10 +15,9 @@ target_item = attack_meta["target_item"]
 
 
 def _load_two_tower(ckpt_path):
-    """Load a plain TwoTower from a TwoTowerTrainTask checkpoint."""
+    """Load a plain TwoTower from a TwoTowerTrainTask checkpoint.
+    Infers user/item counts from checkpoint shapes."""
     from src.distributed import deshard_state_dict
-    ebc = build_ebc(n_users, n_items, embedding_dim=64, device=device)
-    tt = TwoTower(ebc, layer_sizes=[128, 64], device=device)
     state = deshard_state_dict(
         torch.load(ckpt_path, map_location=device, weights_only=False)
     )
@@ -27,9 +26,12 @@ def _load_two_tower(ckpt_path):
         if k.startswith("two_tower."):
             tt_state[k[len("two_tower."):]] = v
     if tt_state:
-        tt.load_state_dict(tt_state, strict=False)
-    else:
-        tt.load_state_dict(state, strict=False)
+        state = tt_state
+    ckpt_n_users = state["ebc.embedding_bags.t_user_id.weight"].shape[0]
+    ckpt_n_items = state["ebc.embedding_bags.t_item_id.weight"].shape[0]
+    ebc = build_ebc(ckpt_n_users, ckpt_n_items, embedding_dim=64, device=device)
+    tt = TwoTower(ebc, layer_sizes=[128, 64], device=device)
+    tt.load_state_dict(state, strict=False)
     return tt
 
 

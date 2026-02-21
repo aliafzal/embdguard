@@ -12,13 +12,6 @@ from torch.optim import Adam
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
-from torchrec.distributed.planner.storage_reservations import (
-    HeuristicalStorageReservation,
-)
-from torchrec.distributed.types import ShardingEnv
-
 from src.model import TwoTower, TwoTowerTrainTask
 
 

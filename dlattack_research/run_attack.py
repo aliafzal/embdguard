@@ -5,7 +5,7 @@ from src.model import build_ebc, TwoTower, TwoTowerTrainTask
 from src.attack import run_dlattack
 from src.evaluate import evaluate
 from src.distributed import (
-    init_process_group, wrap_with_dmp, unwrap_model, extract_state_dict,
+    init_process_group, wrap_with_dmp, extract_state_dict,
 )
 
 os.makedirs("results", exist_ok=True)
@@ -17,15 +17,17 @@ init_process_group(device)
 df, n_users, n_items, _, _ = load_ratings()
 train_df, test_df = split_data(df)
 
-# Build DMP-wrapped model and load baseline weights
-ebc = build_ebc(n_users, n_items, embedding_dim=64, device=torch.device("meta"))
+# Build model on real device, load baseline weights, then wrap with DMP
+from src.distributed import deshard_state_dict
+ebc = build_ebc(n_users, n_items, embedding_dim=64, device=device)
 two_tower = TwoTower(ebc, layer_sizes=[128, 64], device=device)
 train_task = TwoTowerTrainTask(two_tower)
-dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=0.001)
 
-# Load baseline checkpoint
-state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
-dmp_model.module.load_state_dict(state)
+state = deshard_state_dict(
+    torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
+)
+train_task.load_state_dict(state, strict=False)
+dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=0.001)
 print("Loaded baseline model.")
 
 # Choose target item: use a mid-popularity item for realistic attack
@@ -66,5 +68,6 @@ with open("results/attack_results.json", "w") as f:
 
 print("\n=== Attack Summary ===")
 for key, metrics in results.items():
-    print(f"  {key}: HR@10={metrics.get('HR@K', 'N/A'):.4f}, "
-          f"NDCG@10={metrics.get('NDCG@K', 'N/A'):.4f}")
+    hr = metrics.get('HR@K')
+    ndcg = metrics.get('NDCG@K')
+    print(f"  {key}: HR@10={hr:.4f}, NDCG@10={ndcg:.4f}")
