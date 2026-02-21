@@ -18,7 +18,7 @@ def _load_two_tower(ckpt_path):
     """Load a plain TwoTower from a TwoTowerTrainTask checkpoint."""
     ebc = build_ebc(n_users, n_items, embedding_dim=64, device=device)
     tt = TwoTower(ebc, layer_sizes=[128, 64], device=device)
-    state = torch.load(ckpt_path, map_location=device)
+    state = torch.load(ckpt_path, map_location=device, weights_only=False)
     tt_state = {}
     for k, v in state.items():
         if k.startswith("two_tower."):

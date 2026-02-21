@@ -24,7 +24,7 @@ train_task = TwoTowerTrainTask(two_tower)
 dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=0.001)
 
 # Load baseline checkpoint
-state = torch.load("checkpoints/baseline.pt", map_location=device)
+state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
 dmp_model.module.load_state_dict(state)
 print("Loaded baseline model.")
 
