@@ -1,6 +1,6 @@
 """
 Full pipeline: download -> train baseline -> attack -> evaluate -> detect
-All phases use DMP-wrapped models for fused TBE kernels.
+All phases use TwoTowerTrainTask with Adam optimizer.
 
 Usage:
   python main.py --phase all          # run everything
@@ -9,15 +9,13 @@ Usage:
   python main.py --phase evaluate     # only evaluate (requires both checkpoints)
 """
 import argparse, json, os, torch
+from torch.optim import Adam
 from src.dataset import download_ml1m, load_ratings, split_data
 from src.model import build_ebc, TwoTower, TwoTowerTrainTask
 from src.train import train
 from src.attack import run_dlattack
 from src.evaluate import evaluate, target_item_hit_ratio
 from src.detect import detect_fake_users
-from src.distributed import (
-    init_process_group, wrap_with_dmp, extract_state_dict,
-)
 
 
 def get_target_item(train_df, min_count=20, max_count=100):
@@ -26,24 +24,22 @@ def get_target_item(train_df, min_count=20, max_count=100):
     return int(mid[0]) if mid else int(train_df["item_id"].mode()[0])
 
 
-def _build_dmp_model(n_users, n_items, embed_dim, layer_sizes, device, lr):
-    """Build a fresh DMP-wrapped model."""
-    ebc = build_ebc(n_users, n_items, embed_dim, device=torch.device("meta"))
+def _build_model(n_users, n_items, embed_dim, layer_sizes, device, lr):
+    """Build a TwoTowerTrainTask with Adam optimizer."""
+    ebc = build_ebc(n_users, n_items, embed_dim, device=device)
     two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
-    train_task = TwoTowerTrainTask(two_tower)
-    return wrap_with_dmp(train_task, device, lr=lr)
+    model = TwoTowerTrainTask(two_tower)
+    optimizer = Adam(model.parameters(), lr=lr)
+    return model, optimizer
 
 
 def _load_plain_two_tower(embed_dim, layer_sizes, device, ckpt_path):
-    """Load a plain TwoTower from checkpoint (for evaluation without DMP).
+    """Load a plain TwoTower from checkpoint (for evaluation).
 
     Infers user/item counts from checkpoint tensor shapes so it works for
     both clean (n_users) and attacked (n_users + fake_users) checkpoints.
     """
-    from src.distributed import deshard_state_dict
-    state = deshard_state_dict(
-        torch.load(ckpt_path, map_location=device, weights_only=False)
-    )
+    state = torch.load(ckpt_path, map_location=device, weights_only=False)
     # Strip two_tower. prefix if present (checkpoint is from TwoTowerTrainTask)
     tt_state = {}
     for k, v in state.items():
@@ -75,7 +71,6 @@ def main():
     os.makedirs("results", exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    init_process_group(device)
 
     download_ml1m()
     df, n_users, n_items, _, _ = load_ratings()
@@ -83,38 +78,33 @@ def main():
     layer_sizes = [128, 64]
 
     if args.phase in ("all", "baseline"):
-        dmp_model, dense_optimizer = _build_dmp_model(
+        model, optimizer = _build_model(
             n_users, n_items, args.embed_dim, layer_sizes, device, args.lr
         )
         eval_fn = lambda m: evaluate(m, test_df, train_df, n_items, n_neg=99, k=10, device=str(device))
-        train(dmp_model, dense_optimizer, train_df, n_items,
+        train(model, optimizer, train_df, n_items,
               epochs=args.epochs, device=str(device), eval_fn=eval_fn,
               save_path="checkpoints/baseline.pt")
 
     if args.phase in ("all", "attack"):
-        # Build on real device (not meta) so we can load checkpoint before DMP wrapping
-        from src.distributed import deshard_state_dict
+        # Build model on real device, load baseline weights
         ebc = build_ebc(n_users, n_items, args.embed_dim, device=device)
         two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
-        train_task = TwoTowerTrainTask(two_tower)
-        # Load baseline weights into plain model
-        state = deshard_state_dict(
-            torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
-        )
-        train_task.load_state_dict(state, strict=False)
-        # Now wrap with DMP (preserves loaded weights)
-        dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=args.lr)
+        model = TwoTowerTrainTask(two_tower)
+        state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
+        model.load_state_dict(state, strict=False)
+        optimizer = Adam(model.parameters(), lr=args.lr)
 
         target = get_target_item(train_df)
         eval_fn = lambda m: evaluate(m, test_df, train_df, n_items, n_neg=99, k=10, device=str(device))
 
-        results, poisoned, dmp_model, dense_optimizer = run_dlattack(
-            dmp_model, dense_optimizer, train_df, test_df, n_users, n_items,
+        results, poisoned, model, optimizer = run_dlattack(
+            model, optimizer, train_df, test_df, n_users, n_items,
             target_item_id=target, embedding_dim=args.embed_dim,
             layer_sizes=layer_sizes, rounds=args.rounds, m=args.m,
             lr=args.lr, device=str(device), eval_fn=eval_fn,
         )
-        torch.save(extract_state_dict(dmp_model), "checkpoints/attacked_model.pt")
+        torch.save(model.state_dict(), "checkpoints/attacked_model.pt")
         poisoned.to_csv("results/poisoned_train.csv", index=False)
         with open("results/attack_results.json", "w") as f:
             json.dump({"target_item": target, "rounds": results}, f, indent=2)

@@ -5,7 +5,7 @@ from src.detect import detect_fake_users, compute_user_anomaly_scores
 
 N_USERS, N_ITEMS, TARGET = 100, 200, 42
 
-# Build a plain TwoTower (detection doesn't need DMP for testing)
+# Build a plain TwoTower for testing
 ebc = build_ebc(N_USERS + 10, N_ITEMS, embedding_dim=32, device=torch.device("cpu"))
 model = TwoTower(ebc, layer_sizes=[64, 32], device=torch.device("cpu"))
 

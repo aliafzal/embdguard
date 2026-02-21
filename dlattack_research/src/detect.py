@@ -5,7 +5,7 @@ interactions on the target item + items with high embedding similarity.
 Detects fake users by anomaly scoring based on:
   1. Fraction of interactions that are with "popular neighbors" of target item
 
-Accepts either a plain TwoTower or a DMP-wrapped model.
+Accepts either a plain TwoTower or a TwoTowerTrainTask.
 """
 import numpy as np
 import pandas as pd
@@ -14,9 +14,9 @@ from src.model import TwoTower
 
 
 def _unwrap(model) -> TwoTower:
-    """Unwrap DMP model to get the inner TwoTower, or return as-is."""
-    if hasattr(model, "module") and hasattr(model.module, "two_tower"):
-        return model.module.two_tower
+    """Unwrap TwoTowerTrainTask to get the inner TwoTower, or return as-is."""
+    if hasattr(model, "two_tower"):
+        return model.two_tower
     if isinstance(model, TwoTower):
         return model
     return model

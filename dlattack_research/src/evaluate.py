@@ -1,7 +1,7 @@
 """
 Evaluation metrics for Two-Tower recommender.
 
-Accepts either a plain TwoTower or a DMP-wrapped model, unwrapping as needed.
+Accepts either a plain TwoTower or a TwoTowerTrainTask, unwrapping as needed.
 Uses KJT-based forward passes for scoring.
 """
 import torch
@@ -11,9 +11,9 @@ from src.model import TwoTower, make_kjt
 
 
 def _unwrap(model) -> TwoTower:
-    """Unwrap DMP model to get the inner TwoTower, or return as-is."""
-    if hasattr(model, "module") and hasattr(model.module, "two_tower"):
-        return model.module.two_tower
+    """Unwrap TwoTowerTrainTask to get the inner TwoTower, or return as-is."""
+    if hasattr(model, "two_tower"):
+        return model.two_tower
     if isinstance(model, TwoTower):
         return model
     return model

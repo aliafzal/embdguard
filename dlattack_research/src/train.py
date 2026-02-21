@@ -1,9 +1,8 @@
 """
-DMP-aware training loop for Two-Tower recommender.
+Training loop for Two-Tower recommender.
 
-Uses KJT-based forward passes through DMP-wrapped model.
-Sparse optimizer (RowWiseAdagrad) is fused into backward pass by DMP.
-Dense optimizer (Adam) is stepped explicitly for MLP parameters.
+Uses KJT-based forward passes. All parameters (embeddings + MLP) are
+optimized with a single Adam optimizer.
 """
 import torch
 import pandas as pd
@@ -29,15 +28,15 @@ def _negative_sample_tensors(user_t, item_t, n_items, n_neg, device):
     return all_users[perm], all_items[perm], all_labels[perm]
 
 
-def train(dmp_model, dense_optimizer, train_df, n_items, epochs=20,
+def train(model, optimizer, train_df, n_items, epochs=20,
           batch_size=1024, n_neg=4, device="cpu",
           save_path=None, eval_fn=None) -> list:
     """
-    DMP-aware training loop.
+    Training loop for TwoTowerTrainTask with Adam optimizer.
 
     Args:
-        dmp_model: DistributedModelParallel-wrapped TwoTowerTrainTask
-        dense_optimizer: KeyedOptimizerWrapper for MLP parameters
+        model: TwoTowerTrainTask
+        optimizer: Adam optimizer for all parameters
         train_df: DataFrame with user_id, item_id columns
         n_items: total number of items
         epochs: number of training epochs
@@ -56,7 +55,7 @@ def train(dmp_model, dense_optimizer, train_df, n_items, epochs=20,
     pos_items = torch.tensor(train_df["item_id"].values, dtype=torch.long, device=device)
 
     for epoch in range(1, epochs + 1):
-        dmp_model.train()
+        model.train()
 
         users, items, labels = _negative_sample_tensors(
             pos_users, pos_items, n_items, n_neg, device
@@ -71,15 +70,11 @@ def train(dmp_model, dense_optimizer, train_df, n_items, epochs=20,
             kjt = make_kjt(users[start:end], items[start:end])
             batch_labels = labels[start:end]
 
-            # Forward through DMP model (TwoTowerTrainTask)
-            loss, (_loss_detached, _logits, _labels) = dmp_model(kjt, batch_labels)
+            loss, (_loss_detached, _logits, _labels) = model(kjt, batch_labels)
 
-            # Backward: sparse optimizer fused into backward by DMP
+            optimizer.zero_grad()
             loss.backward()
-
-            # Step dense optimizer for MLP params
-            dense_optimizer.step()
-            dense_optimizer.zero_grad()
+            optimizer.step()
 
             total_loss += loss.item() * (end - start)
 
@@ -87,10 +82,7 @@ def train(dmp_model, dense_optimizer, train_df, n_items, epochs=20,
 
         metrics = {}
         if eval_fn is not None and (epoch % 5 == 0 or epoch == epochs):
-            # Eval uses the unwrapped TwoTower
-            from src.distributed import unwrap_model
-            two_tower = unwrap_model(dmp_model)
-            metrics = eval_fn(two_tower)
+            metrics = eval_fn(model.two_tower)
             print(f"  Epoch {epoch:3d} | loss={train_loss:.4f} | "
                   f"HR@{metrics['K']}={metrics['HR@K']:.4f} | "
                   f"NDCG@{metrics['K']}={metrics['NDCG@K']:.4f}")
@@ -100,8 +92,7 @@ def train(dmp_model, dense_optimizer, train_df, n_items, epochs=20,
         history.append((epoch, train_loss, metrics))
 
     if save_path:
-        from src.distributed import extract_state_dict
-        torch.save(extract_state_dict(dmp_model), save_path)
+        torch.save(model.state_dict(), save_path)
         print(f"  Model saved -> {save_path}")
     return history
 

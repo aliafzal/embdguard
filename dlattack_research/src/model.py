@@ -1,16 +1,9 @@
 """
 TorchRec-native Two-Tower recommender model.
 
-Follows the official TorchRec two-tower example pattern:
-  EBC (meta device) -> TwoTower -> TwoTowerTrainTask
-                                          |
-                      apply_optimizer_in_backward (RowWiseAdagrad)
-                                          |
-                                DistributedModelParallel (DMP)
-                                          +
-                                KeyedOptimizerWrapper (Adam for dense)
-
 Architecture:
+  EBC -> TwoTower -> TwoTowerTrainTask + Adam(model.parameters())
+
   Single EBC with two tables (user, item)
   User tower: EBC["user_id"] -> MLP -> L2-normalized vector
   Item tower: EBC["item_id"] -> MLP -> L2-normalized vector

@@ -1,6 +1,6 @@
 """
 Smoke test for the attack module using a tiny synthetic dataset.
-Uses a plain TwoTower (no DMP needed) for attack smoke test.
+Uses a plain TwoTower for attack smoke test.
 """
 import torch, numpy as np, pandas as pd
 from src.model import build_ebc, TwoTower
@@ -10,7 +10,7 @@ N_USERS, N_ITEMS = 50, 100
 TARGET_ITEM = 42
 M_FAKE = 3
 
-# Build a randomly-initialized plain TwoTower (no DMP needed for attack)
+# Build a randomly-initialized plain TwoTower
 ebc = build_ebc(N_USERS, N_ITEMS, embedding_dim=32, device=torch.device("cpu"))
 model = TwoTower(ebc, layer_sizes=[64, 32], device=torch.device("cpu"))
 

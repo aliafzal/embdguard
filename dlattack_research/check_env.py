@@ -17,10 +17,9 @@ check("numpy",        lambda: __import__("numpy"))
 check("sklearn",      lambda: __import__("sklearn"))
 check("tqdm",         lambda: __import__("tqdm"))
 
-# Verify key TorchRec DMP imports
-check("torchrec.distributed.model_parallel", lambda: __import__("torchrec.distributed.model_parallel"))
-check("torchrec.optim.rowwise_adagrad",      lambda: __import__("torchrec.optim.rowwise_adagrad"))
-check("torchrec.optim.keyed",                lambda: __import__("torchrec.optim.keyed"))
+# Verify key TorchRec imports (EBC + KJT)
+check("torchrec.modules.embedding_modules", lambda: __import__("torchrec.modules.embedding_modules"))
+check("torchrec.sparse.jagged_tensor",      lambda: __import__("torchrec.sparse.jagged_tensor"))
 
 import torch
 import torchrec

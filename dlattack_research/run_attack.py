@@ -1,33 +1,27 @@
-"""Execute full DLAttack with DMP-wrapped models."""
+"""Execute full DLAttack."""
 import torch, json, os
+from torch.optim import Adam
 from src.dataset import load_ratings, split_data
 from src.model import build_ebc, TwoTower, TwoTowerTrainTask
 from src.attack import run_dlattack
 from src.evaluate import evaluate
-from src.distributed import (
-    init_process_group, wrap_with_dmp, extract_state_dict,
-)
 
 os.makedirs("results", exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-init_process_group(device)
 
 # Load data
 df, n_users, n_items, _, _ = load_ratings()
 train_df, test_df = split_data(df)
 
-# Build model on real device, load baseline weights, then wrap with DMP
-from src.distributed import deshard_state_dict
+# Build model on real device, load baseline weights
 ebc = build_ebc(n_users, n_items, embedding_dim=64, device=device)
 two_tower = TwoTower(ebc, layer_sizes=[128, 64], device=device)
-train_task = TwoTowerTrainTask(two_tower)
+model = TwoTowerTrainTask(two_tower)
 
-state = deshard_state_dict(
-    torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
-)
-train_task.load_state_dict(state, strict=False)
-dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=0.001)
+state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
+model.load_state_dict(state, strict=False)
+optimizer = Adam(model.parameters(), lr=0.001)
 print("Loaded baseline model.")
 
 # Choose target item: use a mid-popularity item for realistic attack
@@ -39,9 +33,9 @@ print(f"Target item ID: {target_item} "
 
 eval_fn = lambda m: evaluate(m, test_df, train_df, n_items, n_neg=99, k=10, device=str(device))
 
-results, poisoned_train, dmp_model, dense_optimizer = run_dlattack(
-    dmp_model=dmp_model,
-    dense_optimizer=dense_optimizer,
+results, poisoned_train, model, optimizer = run_dlattack(
+    model=model,
+    optimizer=optimizer,
     train_df=train_df,
     test_df=test_df,
     n_users=n_users,
@@ -60,7 +54,7 @@ results, poisoned_train, dmp_model, dense_optimizer = run_dlattack(
 )
 
 # Save poisoned model and results
-torch.save(extract_state_dict(dmp_model), "checkpoints/attacked_model.pt")
+torch.save(model.state_dict(), "checkpoints/attacked_model.pt")
 poisoned_train.to_csv("results/poisoned_training_data.csv", index=False)
 
 with open("results/attack_results.json", "w") as f:
