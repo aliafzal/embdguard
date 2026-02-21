@@ -4,7 +4,8 @@ import os
 import pytest
 import torch
 
-# Add dlattack_research to path so we can import src.model
+# Add repo root and dlattack_research to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dlattack_research"))
 
 from src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt

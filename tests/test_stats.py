@@ -1,6 +1,6 @@
 """Tests for StatAccumulator ring buffer."""
 import numpy as np
-from embdguard.stats import StatAccumulator
+from stats import StatAccumulator
 
 
 def test_push_and_get():

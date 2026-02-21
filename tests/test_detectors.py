@@ -1,8 +1,8 @@
 """Tests for anomaly detectors."""
 import pytest
-from embdguard.stats import StatAccumulator
-from embdguard.detectors.gradient_anomaly import GradientAnomalyDetector
-from embdguard.detectors.access_frequency import AccessFrequencyDetector
+from stats import StatAccumulator
+from detectors.gradient_anomaly import GradientAnomalyDetector
+from detectors.access_frequency import AccessFrequencyDetector
 
 
 class TestGradientAnomalyDetector:

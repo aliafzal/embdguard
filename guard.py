@@ -1,9 +1,9 @@
 """EmbdGuard orchestrator — the main entry point for embedding instrumentation."""
 import torch.nn as nn
 
-from embdguard.hooks import EBCHooks
-from embdguard.stats import StatAccumulator
-from embdguard.log import JSONLLogger
+from hooks import EBCHooks
+from stats import StatAccumulator
+from log import JSONLLogger
 
 
 def _find_ebcs(model: nn.Module) -> dict:

@@ -9,9 +9,9 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from embdguard.alerts import Alert
-from embdguard.detectors import BaseDetector
-from embdguard.stats import StatAccumulator
+from alerts import Alert
+from detectors import BaseDetector
+from stats import StatAccumulator
 
 
 class TIADetector(BaseDetector):

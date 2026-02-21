@@ -1,6 +1,6 @@
 """Tests for EBCHooks — hook attachment and stat collection."""
 import torch
-from embdguard.hooks import EBCHooks
+from hooks import EBCHooks
 
 
 def test_attach_and_detach(small_ebc):

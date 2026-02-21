@@ -7,7 +7,9 @@ EmbdGuard attaches lightweight hooks to TorchRec `EmbeddingBagCollection` module
 ## Quick Start
 
 ```python
-from embdguard import EmbdGuard, GradientAnomalyDetector, AccessFrequencyDetector
+from guard import EmbdGuard
+from detectors.gradient_anomaly import GradientAnomalyDetector
+from detectors.access_frequency import AccessFrequencyDetector
 
 guard = EmbdGuard(model)
 guard.add_detector(GradientAnomalyDetector())
@@ -61,16 +63,15 @@ pytest tests/ -v
 ## Project Structure
 
 ```
-embdguard/              # package
-  guard.py              # EmbdGuard orchestrator
-  hooks.py              # EBC hook attachment + stat collection
-  stats.py              # StatAccumulator ring buffer
-  alerts.py             # Alert dataclass
-  log.py                # JSONL structured logger
-  detectors/
-    gradient_anomaly.py
-    access_frequency.py
-    tia.py
+guard.py                # EmbdGuard orchestrator
+hooks.py                # EBC hook attachment + stat collection
+stats.py                # StatAccumulator ring buffer
+alerts.py               # Alert dataclass
+log.py                  # JSONL structured logger
+detectors/
+  gradient_anomaly.py
+  access_frequency.py
+  tia.py
 tests/
 dlattack_research/      # DLAttack replication (TorchRec Two-Tower on MovieLens-1M)
 ```

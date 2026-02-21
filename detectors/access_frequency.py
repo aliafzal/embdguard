@@ -7,9 +7,9 @@ frequency to spike relative to organic popularity.
 import collections
 import numpy as np
 
-from embdguard.alerts import Alert
-from embdguard.detectors import BaseDetector
-from embdguard.stats import StatAccumulator
+from alerts import Alert
+from detectors import BaseDetector
+from stats import StatAccumulator
 
 
 class AccessFrequencyDetector(BaseDetector):

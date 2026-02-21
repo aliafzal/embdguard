@@ -5,9 +5,9 @@ the training pipeline. DLAttack concentrates fake user interactions on
 target + filler items, producing unusually large gradients on those
 embedding rows.
 """
-from embdguard.alerts import Alert
-from embdguard.detectors import BaseDetector
-from embdguard.stats import StatAccumulator
+from alerts import Alert
+from detectors import BaseDetector
+from stats import StatAccumulator
 
 
 class GradientAnomalyDetector(BaseDetector):
