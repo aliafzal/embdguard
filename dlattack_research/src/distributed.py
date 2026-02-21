@@ -31,12 +31,20 @@ def wrap_with_dmp(
     train_task: TwoTowerTrainTask,
     device: torch.device,
     lr: float = 0.001,
+    sparse_lr: float = 0.1,
 ):
     """Wrap a TwoTowerTrainTask with DistributedModelParallel.
 
     1. Applies fused RowWiseAdagrad to EBC parameters (optimizer in backward)
     2. Wraps with DMP for fused TBE kernels
     3. Creates KeyedOptimizerWrapper with Adam for dense (MLP) parameters
+
+    Args:
+        lr: Learning rate for Adam (dense/MLP parameters). Default 0.001.
+        sparse_lr: Learning rate for RowWiseAdagrad (embeddings). Default 0.1.
+            Adagrad needs a much higher base LR than Adam because it divides
+            by accumulated squared gradients, which shrinks the effective LR
+            over time.
 
     Returns:
         (dmp_model, dense_optimizer)
@@ -49,7 +57,7 @@ def wrap_with_dmp(
     apply_optimizer_in_backward(
         RowWiseAdagrad,
         train_task.two_tower.ebc.parameters(),
-        {"lr": lr},
+        {"lr": sparse_lr},
     )
 
     # Wrap with DMP
