@@ -31,26 +31,36 @@ for batch in dataloader:
 guard.detach()
 ```
 
-## Detection output
+## Detection results
 
-When a detector fires, it returns `Alert` objects:
+`demo.py` trains a Two-Tower model on clean data for 25 steps, then injects poisoned batches where fake users all interact with a target item. EmbdGuard catches the attack:
 
 ```
-Alert(step=247, detector='gradient_anomaly', severity='warning',
-      table='t_item_id', message='Gradient norm z-score=4.12 exceeds threshold 3.0')
+── Phase 1: Clean training (25 steps) ──
+  Step 1: loss=1.8463 — no alerts
+  Step 11: loss=0.8115 — no alerts
+  Step 21: loss=0.7112 — no alerts
 
-Alert(step=310, detector='access_frequency', severity='warning',
-      table='t_item_id', message='Row 1121 accessed 8.3x above mean (count=94, mean=11.3)')
+── Phase 2: Poisoned training targeting item 42 ──
+  Step 31: loss=0.2162 — no alerts
+  [Step 33] WARNING: Row 42 accessed 5.5x above mean (count=11, mean=2.0)
+  [Step 34] WARNING: Row 42 accessed 5.9x above mean (count=12, mean=2.0)
+  [Step 36] WARNING: Row 42 accessed 6.8x above mean (count=14, mean=2.1)
+  [Step 40] WARNING: Row 42 accessed 8.6x above mean (count=18, mean=2.1)
+  [Step 45] WARNING: Row 42 accessed 10.8x above mean (count=23, mean=2.1)
+  [Step 50] WARNING: Row 42 accessed 12.8x above mean (count=28, mean=2.2)
 ```
+
+The `AccessFrequencyDetector` fires at step 33 when the target item's access count crosses 5x the mean — 8 steps after poisoning begins.
 
 ## Logging
 
 With `log_path` set, EmbdGuard writes JSONL — one line per event:
 
 ```jsonl
-{"type": "stats", "step": 1, "table": "t_user_id", "data": {"grad_norm": 0.042, "grad_max": 0.018, "n_accessed": 847.0}}
-{"type": "stats", "step": 1, "table": "t_item_id", "data": {"grad_norm": 0.037, "grad_max": 0.015, "n_accessed": 1203.0}}
-{"type": "alert", "step": 247, "detector": "gradient_anomaly", "severity": "warning", "table": "t_item_id", "message": "Gradient norm z-score=4.12 exceeds threshold 3.0", "details": {"z_score": 4.12, "value": 0.189, "rolling_mean": 0.041, "rolling_std": 0.036}}
+{"type": "stats", "step": 1, "table": "t_user_id", "data": {"n_accessed": 116.0, "grad_norm": 0.0887, "grad_max": 0.0091}}
+{"type": "stats", "step": 1, "table": "t_item_id", "data": {"n_accessed": 125.0, "grad_norm": 0.0952, "grad_max": 0.0110}}
+{"type": "alert", "step": 33, "detector": "access_frequency", "severity": "warning", "table": "t_item_id", "message": "Row 42 accessed 5.5x above mean (count=11, mean=2.0)", "details": {"concentration_ratio": 5.46, "hottest_row": 42, "hottest_count": 11, "mean_count": 2.01}}
 ```
 
 ## Tests

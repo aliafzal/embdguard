@@ -103,7 +103,7 @@ class EmbdGuard:
             for tname, acc in self._table_stats.items():
                 snapshot[tname] = {
                     s: float(acc.get(s)[-1]) for s in acc.stat_names
-                    if len(acc.get(s)) > 0 and s != "accessed_ids"
+                    if s != "accessed_ids" and len(acc.get(s)) > 0
                 }
             self._logger.log_stats(self._step_count, snapshot)
 

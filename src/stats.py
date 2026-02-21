@@ -27,11 +27,18 @@ class StatAccumulator:
                 self._buffers[name].append(value)
         self._count += 1
 
-    def get(self, stat_name: str) -> np.ndarray:
-        """Return array of recent values for a stat (oldest first)."""
+    def get(self, stat_name: str):
+        """Return array of recent values for a stat (oldest first).
+
+        Returns np.ndarray for numeric stats, or list for non-numeric
+        (e.g. variable-length accessed_ids lists).
+        """
         if stat_name not in self._buffers:
             return np.array([])
-        return np.array(self._buffers[stat_name])
+        try:
+            return np.array(self._buffers[stat_name])
+        except ValueError:
+            return list(self._buffers[stat_name])
 
     def rolling_mean(self, stat_name: str, n: int = None) -> float:
         """Mean of last n values (default: all in window)."""
