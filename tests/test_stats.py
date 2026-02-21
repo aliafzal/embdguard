@@ -1,6 +1,6 @@
 """Tests for StatAccumulator ring buffer."""
 import numpy as np
-from stats import StatAccumulator
+from src.stats import StatAccumulator
 
 
 def test_push_and_get():

@@ -9,9 +9,9 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from alerts import Alert
-from detectors import BaseDetector
-from stats import StatAccumulator
+from src.alerts import Alert
+from src.detectors import BaseDetector
+from src.stats import StatAccumulator
 
 
 class TIADetector(BaseDetector):

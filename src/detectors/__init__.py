@@ -1,8 +1,8 @@
 """Base detector interface for embedding anomaly detection."""
 from abc import ABC, abstractmethod
 
-from alerts import Alert
-from stats import StatAccumulator
+from src.alerts import Alert
+from src.stats import StatAccumulator
 
 
 class BaseDetector(ABC):

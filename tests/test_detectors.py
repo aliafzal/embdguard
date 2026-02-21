@@ -1,8 +1,8 @@
 """Tests for anomaly detectors."""
 import pytest
-from stats import StatAccumulator
-from detectors.gradient_anomaly import GradientAnomalyDetector
-from detectors.access_frequency import AccessFrequencyDetector
+from src.stats import StatAccumulator
+from src.detectors.gradient_anomaly import GradientAnomalyDetector
+from src.detectors.access_frequency import AccessFrequencyDetector
 
 
 class TestGradientAnomalyDetector:

@@ -4,9 +4,9 @@ import json
 import tempfile
 import torch
 import pytest
-from guard import EmbdGuard
-from detectors.gradient_anomaly import GradientAnomalyDetector
-from detectors.access_frequency import AccessFrequencyDetector
+from src.guard import EmbdGuard
+from src.detectors.gradient_anomaly import GradientAnomalyDetector
+from src.detectors.access_frequency import AccessFrequencyDetector
 
 
 def test_guard_attaches_to_model(small_model):

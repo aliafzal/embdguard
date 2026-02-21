@@ -7,9 +7,9 @@ frequency to spike relative to organic popularity.
 import collections
 import numpy as np
 
-from alerts import Alert
-from detectors import BaseDetector
-from stats import StatAccumulator
+from src.alerts import Alert
+from src.detectors import BaseDetector
+from src.stats import StatAccumulator
 
 
 class AccessFrequencyDetector(BaseDetector):
