@@ -14,14 +14,15 @@ For R rounds:
   4. Create new TwoTower with expanded user embedding, re-wrap with DMP, retrain
 
 Key insight: the surrogate model used for gradient optimization does NOT need
-DMP -- it's a plain TwoTower for direct weight access and deepcopy.
+DMP -- it's a plain TwoTower for direct weight access.
+Cannot deepcopy DMP-wrapped modules (they contain ProcessGroup objects),
+so we rebuild fresh TwoTowers and copy weights via state_dict.
 """
 
 import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 from tqdm import tqdm
 
 from src.model import TwoTower, TwoTowerTrainTask, build_ebc, make_kjt
@@ -39,22 +40,60 @@ def attack_loss(user_continuous_emb: torch.Tensor,
                 lambda_reg: float = 1e-2) -> torch.Tensor:
     """
     Attack objective: maximize score between fake user embedding and target item.
-
-    user_continuous_emb: (embed_dim,) -- continuous approximation of fake user embedding
-    target_item_emb:     (embed_dim,) -- target item embedding (detached from surrogate)
-    all_item_embs:       (n_items, embed_dim) -- all item embeddings (for L2 reg)
-    lambda_reg:          weight for embedding magnitude regularization
     """
     u_norm = nn.functional.normalize(user_continuous_emb.unsqueeze(0), dim=-1).squeeze(0)
     t_norm = nn.functional.normalize(target_item_emb, dim=-1)
-
-    # Primary: maximize dot product with target item (minimize negative)
     promote_loss = -(u_norm * t_norm).sum()
-
-    # Regularization: keep fake user embedding within normal distribution
     reg = user_continuous_emb.norm(p=2)
-
     return promote_loss + lambda_reg * reg
+
+
+def _get_model_config(two_tower):
+    """Extract config (n_users, n_items, embedding_dim, layer_sizes) from a TwoTower."""
+    configs = two_tower.ebc.embedding_bag_configs()
+    n_users = None
+    n_items = None
+    embedding_dim = configs[0].embedding_dim
+    for cfg in configs:
+        if cfg.name == "t_user_id":
+            n_users = cfg.num_embeddings
+        elif cfg.name == "t_item_id":
+            n_items = cfg.num_embeddings
+    layer_sizes = []
+    for module in two_tower.user_proj:
+        if isinstance(module, nn.Linear):
+            layer_sizes.append(module.out_features)
+    return n_users, n_items, embedding_dim, layer_sizes
+
+
+def _build_plain_two_tower(n_users, n_items, embedding_dim, layer_sizes, device):
+    """Build a fresh plain TwoTower on a real device (not meta)."""
+    ebc = build_ebc(n_users, n_items, embedding_dim, device=torch.device(device))
+    return TwoTower(ebc, layer_sizes=layer_sizes, device=torch.device(device))
+
+
+def _copy_weights_to_plain(dmp_model, plain_two_tower):
+    """Copy weights from DMP-wrapped model to a plain TwoTower via state_dict."""
+    # Get the full state dict from the DMP inner module (TwoTowerTrainTask)
+    src_state = extract_state_dict(dmp_model)
+    # Filter for two_tower keys and strip prefix
+    tt_state = {}
+    for k, v in src_state.items():
+        if k.startswith("two_tower."):
+            tt_state[k[len("two_tower."):]] = v
+    if tt_state:
+        plain_two_tower.load_state_dict(tt_state, strict=False)
+    else:
+        plain_two_tower.load_state_dict(src_state, strict=False)
+
+
+def _build_surrogate_from_dmp(dmp_model, device) -> TwoTower:
+    """Build a fresh plain TwoTower and copy weights from DMP model."""
+    inner = unwrap_model(dmp_model)
+    n_users, n_items, embedding_dim, layer_sizes = _get_model_config(inner)
+    surrogate = _build_plain_two_tower(n_users, n_items, embedding_dim, layer_sizes, device)
+    _copy_weights_to_plain(dmp_model, surrogate)
+    return surrogate
 
 
 def optimize_fake_user(
@@ -68,36 +107,24 @@ def optimize_fake_user(
 ) -> np.ndarray:
     """
     Generate one fake user interaction vector via gradient optimization.
-
     Uses a plain TwoTower (not DMP-wrapped) for direct weight access.
-
-    Returns:
-        binary interaction vector of shape (n_items,)
-        where entry i = 1 means fake user "interacted with" item i.
-        Always includes target_item_id in interactions.
     """
     surrogate.eval()
 
-    # Get item embeddings from the surrogate (detach so we don't update them)
     all_item_embs = surrogate.ebc.embedding_bags["t_item_id"].weight.detach()
     target_item_emb = all_item_embs[target_item_id].detach()
 
-    # Initialize: continuous weight vector over items
     w = torch.zeros(n_items, device=device, requires_grad=True)
     optimizer = torch.optim.Adam([w], lr=lr_attack)
 
     for _ in range(n_optim_steps):
         optimizer.zero_grad()
-
-        # Aggregate item embeddings weighted by w (soft bag-of-items)
         w_softmax = torch.softmax(w, dim=0)
         fake_user_emb = (w_softmax.unsqueeze(1) * all_item_embs).sum(0)
-
         loss = attack_loss(fake_user_emb, target_item_emb, all_item_embs)
         loss.backward()
         optimizer.step()
 
-    # Discretize: select top-n_filler items + target item
     with torch.no_grad():
         w_vals = w.detach().cpu().numpy()
         probs = torch.softmax(torch.tensor(w_vals), dim=0).numpy()
@@ -126,10 +153,7 @@ def generate_fake_users(
     fake_user_id_start: int = None,
     device: str = "cpu",
 ) -> pd.DataFrame:
-    """
-    Generate m fake users using a plain TwoTower surrogate.
-    Returns DataFrame ready to concat with training data.
-    """
+    """Generate m fake users using a plain TwoTower surrogate."""
     if fake_user_id_start is None:
         fake_user_id_start = n_users
 
@@ -148,21 +172,6 @@ def generate_fake_users(
     print(f"  Generated {m} fake users with {len(fake_df)} total interactions "
           f"(avg {len(fake_df)/m:.1f}/user)")
     return fake_df
-
-
-def _build_surrogate_from_dmp(dmp_model, device) -> TwoTower:
-    """Extract weights from DMP model and create a plain TwoTower surrogate."""
-    inner_two_tower = unwrap_model(dmp_model)
-    # Deep copy the plain TwoTower (not the DMP wrapper)
-    surrogate = deepcopy(inner_two_tower)
-    return surrogate
-
-
-def _rebuild_dmp_model(two_tower, device, lr):
-    """Create a new DMP-wrapped model from a plain TwoTower."""
-    train_task = TwoTowerTrainTask(two_tower)
-    dmp_model, dense_optimizer = wrap_with_dmp(train_task, device, lr=lr)
-    return dmp_model, dense_optimizer
 
 
 def run_dlattack(
@@ -185,29 +194,20 @@ def run_dlattack(
     """
     Full DLAttack loop with DMP support.
 
-    For each round:
-      1. Extract weights from DMP model, create plain TwoTower surrogate
-      2. Generate m fake users via gradient optimization on surrogate
-      3. Inject fake users into training data
-      4. Create new TwoTower with expanded user embedding, re-wrap with DMP, retrain
-
-    Args:
-        dmp_model: DMP-wrapped TwoTowerTrainTask
-        dense_optimizer: KeyedOptimizerWrapper for MLP params
-        ...other args as before...
-
     Returns:
         (results_dict, poisoned_train_df, dmp_model, dense_optimizer)
     """
-    from src.evaluate import evaluate
-
     poisoned_train = train_df.copy()
     fake_user_id_start = n_users
     results = {}
 
+    # Get model config from current model
+    inner = unwrap_model(dmp_model)
+    _, _, embedding_dim, layer_sizes = _get_model_config(inner)
+
     # Evaluate before any attack
     if eval_fn:
-        two_tower = unwrap_model(dmp_model)
+        two_tower = _build_surrogate_from_dmp(dmp_model, device)
         metrics = eval_fn(two_tower)
         results["round_0_clean"] = metrics
         print(f"\n  [Before Attack] HR@{metrics['K']}={metrics['HR@K']:.4f} | "
@@ -223,7 +223,7 @@ def run_dlattack(
         max_user_id = int(poisoned_train["user_id"].max()) + 1
         surrogate.resize_user_embedding(max_user_id)
 
-        # Retrain surrogate (plain TwoTower, no DMP needed for surrogate)
+        # Retrain surrogate via DMP
         print(f"  Retraining surrogate on {len(poisoned_train)} interactions...")
         surr_task = TwoTowerTrainTask(surrogate)
         surr_dmp, surr_opt = wrap_with_dmp(surr_task, torch.device(device), lr=lr)
@@ -232,8 +232,10 @@ def run_dlattack(
             epochs=retrain_epochs, batch_size=2048,
             device=device, eval_fn=None, save_path=None,
         )
-        # Extract retrained surrogate
-        surrogate = unwrap_model(surr_dmp)
+        # Extract retrained surrogate as plain TwoTower
+        surr_n_users, _, _, _ = _get_model_config(unwrap_model(surr_dmp))
+        surrogate = _build_plain_two_tower(surr_n_users, n_items, embedding_dim, layer_sizes, device)
+        _copy_weights_to_plain(surr_dmp, surrogate)
 
         # Step 2: Generate fake users using plain surrogate
         print(f"  Generating {m} fake users...")
@@ -255,28 +257,13 @@ def run_dlattack(
         print(f"  Poisoned training set: {len(poisoned_train)} interactions "
               f"({n_total_fake} from fake users)")
 
-        # Step 4: Create new TwoTower with expanded user embedding, re-wrap with DMP
+        # Step 4: Build new expanded TwoTower, copy weights, re-wrap with DMP, retrain
         max_user_id = int(poisoned_train["user_id"].max()) + 1
-        inner = unwrap_model(dmp_model)
-        # Build a fresh TwoTower, copy weights, expand user embeddings
-        embedding_dim = inner.ebc.embedding_bag_configs()[0].embedding_dim
-        layer_sizes = []
-        for module in inner.user_proj:
-            if isinstance(module, nn.Linear):
-                layer_sizes.append(module.out_features)
-        new_ebc = build_ebc(max_user_id, n_items, embedding_dim, torch.device(device))
-        new_two_tower = TwoTower(new_ebc, layer_sizes, torch.device(device))
-
-        # Copy weights from current model
-        with torch.no_grad():
-            old_user_w = inner.ebc.embedding_bags["t_user_id"].weight.data
-            new_two_tower.ebc.embedding_bags["t_user_id"].weight[:old_user_w.shape[0]] = old_user_w
-            new_two_tower.ebc.embedding_bags["t_item_id"].weight.copy_(
-                inner.ebc.embedding_bags["t_item_id"].weight.data
-            )
-            # Copy MLP weights
-            new_two_tower.user_proj.load_state_dict(inner.user_proj.state_dict())
-            new_two_tower.item_proj.load_state_dict(inner.item_proj.state_dict())
+        new_two_tower = _build_plain_two_tower(
+            max_user_id, n_items, embedding_dim, layer_sizes, device
+        )
+        # Copy weights from current DMP model
+        _copy_weights_to_plain(dmp_model, new_two_tower)
 
         print(f"  Retraining main model on poisoned data...")
         new_task = TwoTowerTrainTask(new_two_tower)
@@ -289,8 +276,8 @@ def run_dlattack(
 
         # Evaluate
         if eval_fn:
-            two_tower = unwrap_model(dmp_model)
-            metrics = eval_fn(two_tower)
+            eval_tt = _build_surrogate_from_dmp(dmp_model, device)
+            metrics = eval_fn(eval_tt)
             results[f"round_{r}"] = metrics
             print(f"  [After Round {r}] HR@{metrics['K']}={metrics['HR@K']:.4f} | "
                   f"NDCG@{metrics['K']}={metrics['NDCG@K']:.4f}")
