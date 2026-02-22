@@ -1,0 +1,20 @@
+{
+  "id": "aliafzal9323/embdguard-embedding-poisoning-detection-recsys",
+  "title": "EmbdGuard Embedding Poisoning Detection RecSys",
+  "code_file": "embdguard-movielens.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "recommender systems",
+    "adversarial machine learning",
+    "data poisoning",
+    "torchrec",
+    "embedding security"
+  ],
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
