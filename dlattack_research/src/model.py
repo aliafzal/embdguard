@@ -29,6 +29,12 @@ try:
 except (ImportError, OSError, AttributeError):
     _TORCHREC_AVAILABLE = False
 
+if not _TORCHREC_AVAILABLE:
+    import logging
+    logging.getLogger(__name__).warning(
+        "TorchRec unavailable — using pure-PyTorch fallback for EmbeddingBagCollection and KeyedJaggedTensor"
+    )
+
 
 # ── Pure-PyTorch fallbacks (used when torchrec is broken) ───────────────
 

@@ -80,6 +80,7 @@ def _build_surrogate(src_model, n_users, n_items, embedding_dim, layer_sizes, de
     """Build a fresh plain TwoTower and copy weights from source model."""
     surrogate = _build_plain_two_tower(n_users, n_items, embedding_dim, layer_sizes, device)
     _copy_weights_to_plain(src_model, surrogate)
+    surrogate.to(torch.device(device))
     return surrogate
 
 
@@ -96,6 +97,7 @@ def optimize_fake_user(
     Generate one fake user interaction vector via gradient optimization.
     Uses a plain TwoTower for direct weight access.
     """
+    surrogate.to(device)
     surrogate.eval()
 
     all_item_embs = surrogate.ebc.embedding_bags["t_item_id"].weight.detach()

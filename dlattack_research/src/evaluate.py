@@ -40,6 +40,7 @@ def evaluate(model, test_df, train_df, n_items: int,
     Batched on GPU for speed.
     """
     two_tower = _unwrap(model)
+    two_tower.to(device)
     two_tower.eval()
 
     pos_items = dict(zip(test_df["user_id"], test_df["item_id"]))
@@ -84,6 +85,7 @@ def target_item_hit_ratio(model, target_item_id: int,
     Measures how often target_item appears in the top-K recommendation list.
     """
     two_tower = _unwrap(model)
+    two_tower.to(device)
     two_tower.eval()
 
     user_items = train_df.groupby("user_id")["item_id"].apply(set).to_dict()

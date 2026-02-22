@@ -12,6 +12,8 @@ from src.model import make_kjt
 
 def _negative_sample_tensors(user_t, item_t, n_items, n_neg, device):
     """Fast GPU-native negative sampling. All ops on device, no Python loops."""
+    user_t = user_t.to(device)
+    item_t = item_t.to(device)
     n_pos = len(user_t)
 
     neg_users = user_t.repeat_interleave(n_neg)
@@ -47,8 +49,9 @@ def train(model, optimizer, train_df, n_items, epochs=20,
         eval_fn: optional evaluation callback
     """
     history = []
+    model.to(device)
     print(f"  Training: {len(train_df)} interactions, epochs={epochs}, "
-          f"batch={batch_size}, n_neg={n_neg}")
+          f"batch={batch_size}, n_neg={n_neg}, device={device}")
 
     # Move positive interactions to device once
     pos_users = torch.tensor(train_df["user_id"].values, dtype=torch.long, device=device)
