@@ -16,7 +16,7 @@ Optimizer: Adam with parameter groups — embedding_lr=0.1 for EBC params,
 """
 import torch
 import torch.nn as nn
-import torchrec
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -32,13 +32,13 @@ def build_ebc(
         device = torch.device("cpu")
     return EmbeddingBagCollection(
         tables=[
-            torchrec.EmbeddingBagConfig(
+            EmbeddingBagConfig(
                 name="t_user_id",
                 num_embeddings=n_users,
                 embedding_dim=embedding_dim,
                 feature_names=["user_id"],
             ),
-            torchrec.EmbeddingBagConfig(
+            EmbeddingBagConfig(
                 name="t_item_id",
                 num_embeddings=n_items,
                 embedding_dim=embedding_dim,
