@@ -157,7 +157,10 @@ src/
     compare.py             Detector comparison framework
 tests/
 run_evaluation.py          Top-level evaluation script
+eval_movielens.py          MovieLens-1M evaluation script
 demo.py                    Detection + defense demo
-demo.ipynb                 Jupyter notebook demo with plots
+notebooks/
+  demo.ipynb               Jupyter notebook demo with plots
+  validate_movielens.ipynb MovieLens-1M validation notebook
 dlattack_research/
 ```
