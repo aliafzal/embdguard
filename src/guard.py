@@ -54,6 +54,7 @@ class EmbdGuard:
         self._check_interval = check_interval
         self._step_count = 0
         self._detectors = []
+        self._defenses = []
         self._table_stats: dict[str, StatAccumulator] = {}
         self._logger = JSONLLogger(log_path) if log_path else None
 
@@ -76,6 +77,12 @@ class EmbdGuard:
     def add_detector(self, detector) -> "EmbdGuard":
         """Register a detector. Returns self for chaining."""
         self._detectors.append(detector)
+        return self
+
+    def add_defense(self, defense) -> "EmbdGuard":
+        """Register a defense. Installs hooks and returns self for chaining."""
+        defense.apply(self._model)
+        self._defenses.append(defense)
         return self
 
     def step(self) -> list:
@@ -116,6 +123,18 @@ class EmbdGuard:
                 )
                 alerts.extend(new_alerts)
 
+        # Activate defenses for flagged rows
+        if alerts and self._defenses:
+            for alert in alerts:
+                row_id = alert.details.get("row_id") or alert.details.get("hottest_row")
+                if row_id is not None:
+                    for defense in self._defenses:
+                        defense.activate(alert.table, [int(row_id)])
+
+        # Step all defenses (decrement durations, expire)
+        for defense in self._defenses:
+            defense.step()
+
         # Log alerts
         if self._logger and alerts:
             for alert in alerts:
@@ -154,6 +173,9 @@ class EmbdGuard:
         for hooks in self._hooks_list:
             hooks.detach()
         self._hooks_list.clear()
+        for defense in self._defenses:
+            defense.remove()
+        self._defenses.clear()
         if self._logger:
             self._logger.close()
             self._logger = None

@@ -69,6 +69,35 @@ class StatAccumulator:
             return 0.0
         return float((arr[-1] - mean) / std)
 
+    def percentile(self, stat_name: str, q: float) -> float:
+        """Return the q-th percentile of buffered values."""
+        arr = self.get(stat_name)
+        if len(arr) == 0:
+            return 0.0
+        return float(np.percentile(arr, q))
+
+    def ema(self, stat_name: str, alpha: float = 0.1) -> float:
+        """Exponential moving average of buffered values."""
+        arr = self.get(stat_name)
+        if len(arr) == 0:
+            return 0.0
+        result = arr[0]
+        for v in arr[1:]:
+            result = alpha * v + (1 - alpha) * result
+        return float(result)
+
+    def kurtosis(self, stat_name: str) -> float:
+        """Excess kurtosis of buffered values."""
+        arr = self.get(stat_name)
+        if len(arr) < 4:
+            return 0.0
+        mean = arr.mean()
+        var = arr.var()
+        if var < 1e-10:
+            return 0.0
+        m4 = ((arr - mean) ** 4).mean()
+        return float(m4 / (var ** 2) - 3)
+
     @property
     def stat_names(self) -> list[str]:
         return list(self._buffers.keys())

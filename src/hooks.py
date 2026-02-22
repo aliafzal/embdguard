@@ -95,10 +95,30 @@ class EBCHooks:
         def hook(module, grad_input, grad_output):
             if grad_output and grad_output[0] is not None:
                 g = grad_output[0]
-                self._backward_buffers[table_name] = {
+                stats = {
                     "grad_norm": g.norm().item(),
                     "grad_max": g.abs().max().item(),
                 }
+
+                # Per-row gradient analysis for distribution detectors
+                if g.dim() == 2:
+                    row_norms = g.norm(dim=1)
+                    if row_norms.numel() > 1:
+                        mean = row_norms.mean()
+                        var = row_norms.var()
+                        if var > 1e-12:
+                            # Excess kurtosis: m4/m2^2 - 3
+                            m4 = ((row_norms - mean) ** 4).mean()
+                            stats["grad_kurtosis"] = (m4 / (var ** 2) - 3).item()
+                        else:
+                            stats["grad_kurtosis"] = 0.0
+                        median = row_norms.median()
+                        if median > 1e-12:
+                            stats["grad_concentration"] = (row_norms.max() / median).item()
+                        else:
+                            stats["grad_concentration"] = 0.0
+
+                self._backward_buffers[table_name] = stats
         return hook
 
     @property
