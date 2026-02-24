@@ -39,7 +39,12 @@ class TIADetector(BaseDetector):
         return "tia"
 
     def check(self, step, table_stats, model) -> list[Alert]:
-        two_tower = model.two_tower if hasattr(model, "two_tower") else model
+        if hasattr(model, "two_tower"):
+            two_tower = model.two_tower
+        elif hasattr(model, "dlrm"):
+            two_tower = model.dlrm
+        else:
+            two_tower = model
         if not hasattr(two_tower, "ebc"):
             return []
 
