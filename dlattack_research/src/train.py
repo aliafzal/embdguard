@@ -85,7 +85,9 @@ def train(model, optimizer, train_df, n_items, epochs=20,
 
         metrics = {}
         if eval_fn is not None and (epoch % 5 == 0 or epoch == epochs):
-            metrics = eval_fn(model.two_tower)
+            inner = model.two_tower if hasattr(model, "two_tower") else (
+                model.dlrm if hasattr(model, "dlrm") else model)
+            metrics = eval_fn(inner)
             print(f"  Epoch {epoch:3d} | loss={train_loss:.4f} | "
                   f"HR@{metrics['K']}={metrics['HR@K']:.4f} | "
                   f"NDCG@{metrics['K']}={metrics['NDCG@K']:.4f}")

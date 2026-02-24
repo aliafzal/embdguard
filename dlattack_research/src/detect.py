@@ -10,15 +10,12 @@ Accepts either a plain TwoTower or a TwoTowerTrainTask.
 import numpy as np
 import pandas as pd
 import torch
-from src.model import TwoTower
-
-
-def _unwrap(model) -> TwoTower:
-    """Unwrap TwoTowerTrainTask to get the inner TwoTower, or return as-is."""
+def _unwrap(model):
+    """Unwrap TrainTask wrapper to get the inner model, or return as-is."""
     if hasattr(model, "two_tower"):
         return model.two_tower
-    if isinstance(model, TwoTower):
-        return model
+    if hasattr(model, "dlrm"):
+        return model.dlrm
     return model
 
 
@@ -37,7 +34,7 @@ def compute_user_anomaly_scores(
     two_tower = _unwrap(model)
 
     with torch.no_grad():
-        item_embs = two_tower.ebc.embedding_bags["t_item_id"].weight.data
+        item_embs = two_tower.get_item_embeddings()
         target_emb = item_embs[target_item_id]
         sims = torch.nn.functional.cosine_similarity(
             item_embs, target_emb.unsqueeze(0)

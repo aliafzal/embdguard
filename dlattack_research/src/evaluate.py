@@ -7,27 +7,26 @@ Uses KJT-based forward passes for scoring.
 import torch
 import numpy as np
 
-from src.model import TwoTower, make_kjt
+from src.model import make_kjt
 
 
-def _unwrap(model) -> TwoTower:
-    """Unwrap TwoTowerTrainTask to get the inner TwoTower, or return as-is."""
+def _unwrap(model):
+    """Unwrap TrainTask wrapper to get the inner model, or return as-is."""
     if hasattr(model, "two_tower"):
         return model.two_tower
-    if isinstance(model, TwoTower):
-        return model
+    if hasattr(model, "dlrm"):
+        return model.dlrm
     return model
 
 
-def _score_pairs(two_tower: TwoTower, user_ids: torch.Tensor,
+def _score_pairs(model, user_ids: torch.Tensor,
                  item_ids: torch.Tensor, batch_size: int = 65536) -> np.ndarray:
-    """Score (user, item) pairs using KJT forward pass, return numpy array."""
+    """Score (user, item) pairs using model.score(), return numpy array."""
     all_scores = []
     for start in range(0, len(user_ids), batch_size):
         end = min(start + batch_size, len(user_ids))
         kjt = make_kjt(user_ids[start:end], item_ids[start:end])
-        user_emb, item_emb = two_tower(kjt)
-        scores = (user_emb * item_emb).sum(dim=1)
+        scores = model.score(kjt)
         all_scores.append(scores.cpu())
     return torch.cat(all_scores).numpy()
 
