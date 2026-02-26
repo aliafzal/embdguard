@@ -13,7 +13,7 @@ sys.path.insert(0, REPO_ROOT)
 import torch
 import numpy as np
 
-from dlattack_research.src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
+from src.models import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
 
 from src.guard import EmbdGuard
 from src.detectors.gradient_anomaly import GradientAnomalyDetector
