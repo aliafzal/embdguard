@@ -10,6 +10,7 @@ Accepts either a plain TwoTower or a TwoTowerTrainTask.
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.metrics import roc_auc_score
 def _unwrap(model):
     """Unwrap TrainTask wrapper to get the inner model, or return as-is."""
     if hasattr(model, "two_tower"):
@@ -66,3 +67,77 @@ def detect_fake_users(
     print(f"  Threshold (p{threshold_percentile}): {threshold:.4f}")
     print(f"  Flagged {len(flagged)} users out of {len(scores)}")
     return flagged
+
+
+def sweep_detection_thresholds(
+    train_df: pd.DataFrame,
+    model,
+    target_item_id: int,
+    n_items: int,
+    n_real_users: int,
+    percentiles: list = None,
+) -> dict:
+    """
+    Evaluate detection precision/recall/F1 at multiple percentile thresholds.
+
+    Args:
+        train_df: poisoned training DataFrame (real + fake users)
+        model: trained model (TwoTower or TrainTask wrapper)
+        target_item_id: the attack target item
+        n_items: total number of items
+        n_real_users: number of real users (fake users have IDs >= n_real_users)
+        percentiles: list of percentile thresholds to evaluate
+
+    Returns:
+        dict mapping percentile label -> {precision, recall, f1, n_flagged}
+    """
+    if percentiles is None:
+        percentiles = [90, 95, 99]
+
+    scores = compute_user_anomaly_scores(train_df, model, target_item_id, n_items)
+    fake_ids = set(train_df[train_df["user_id"] >= n_real_users]["user_id"].unique())
+
+    results = {}
+    for p in percentiles:
+        threshold = np.percentile(scores.values, p)
+        flagged = set(scores[scores >= threshold].index.tolist())
+        tp = len(flagged & fake_ids)
+        precision = tp / max(len(flagged), 1)
+        recall = tp / max(len(fake_ids), 1)
+        f1 = 2 * precision * recall / max(precision + recall, 1e-12)
+        results[f"p{p}"] = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "n_flagged": len(flagged),
+            "threshold": float(threshold),
+        }
+    return results
+
+
+def compute_detection_auc(
+    train_df: pd.DataFrame,
+    model,
+    target_item_id: int,
+    n_items: int,
+    n_real_users: int,
+) -> float:
+    """
+    Compute AUC-ROC for TIA-based fake user detection.
+
+    Args:
+        train_df: poisoned training DataFrame
+        model: trained model
+        target_item_id: the attack target item
+        n_items: total number of items
+        n_real_users: number of real users (fake user IDs >= n_real_users)
+
+    Returns:
+        AUC-ROC score (float)
+    """
+    scores = compute_user_anomaly_scores(train_df, model, target_item_id, n_items)
+    # Binary labels: 1 = fake, 0 = real
+    labels = np.array([1 if uid >= n_real_users else 0 for uid in scores.index])
+    if labels.sum() == 0 or labels.sum() == len(labels):
+        return 0.0  # degenerate case — all one class
+    return float(roc_auc_score(labels, scores.values))
