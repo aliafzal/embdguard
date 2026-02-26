@@ -8,7 +8,6 @@ Usage:
     python eval_movielens.py --rounds 3 --m 10
 """
 import sys, os, argparse, warnings
-import importlib
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 DLATTACK_DIR = os.path.join(REPO_ROOT, "dlattack_research")
@@ -16,6 +15,7 @@ DLATTACK_DIR = os.path.join(REPO_ROOT, "dlattack_research")
 # Import EmbdGuard modules first (from REPO_ROOT/src/)
 sys.path.insert(0, REPO_ROOT)
 
+from src.models import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
 from src.guard import EmbdGuard
 from src.detectors.gradient_anomaly import GradientAnomalyDetector
 from src.detectors.access_frequency import AccessFrequencyDetector
@@ -23,26 +23,27 @@ from src.detectors.embedding_drift import EmbeddingDriftDetector
 from src.detectors.gradient_distribution import GradientDistributionDetector
 from src.detectors.temporal_access import TemporalAccessDetector
 
-# Save EmbdGuard's src module reference
+# Save EmbdGuard's src module reference (including src.models)
 import src as embdguard_src
+_saved_src_modules = {k: v for k, v in sys.modules.items() if k == "src" or k.startswith("src.")}
 
-# Now import dlattack modules by temporarily swapping sys.path
-# We need dlattack_research/ on path so its internal `from src.model import ...` works
+# Import dlattack modules by temporarily swapping sys.path
+# We need dlattack_research/ on path so its internal `from src.train import ...` works
 sys.path.insert(0, DLATTACK_DIR)
-# Remove the cached `src` module so Python re-discovers from dlattack dir
-del sys.modules["src"]
+# Remove cached `src` module so Python re-discovers from dlattack dir
+# but preserve src.models* entries
 for key in list(sys.modules.keys()):
-    if key.startswith("src."):
+    if key == "src" or (key.startswith("src.") and not key.startswith("src.models")):
         del sys.modules[key]
 
 import src.dataset as dl_dataset
-import src.model as dl_model
 import src.train as dl_train
 import src.attack as dl_attack
 import src.evaluate as dl_evaluate
 
 # Restore EmbdGuard's src module
-sys.modules["src"] = embdguard_src
+for k, v in _saved_src_modules.items():
+    sys.modules[k] = v
 sys.path.remove(DLATTACK_DIR)
 
 import torch
@@ -86,12 +87,12 @@ def main():
     print(f"\n{'=' * 60}")
     print("  Loading baseline model")
     print("=" * 60)
-    ebc = dl_model.build_ebc(n_users, n_items, args.embed_dim, device=device)
-    two_tower = dl_model.TwoTower(ebc, layer_sizes=layer_sizes, device=device)
-    model = dl_model.TwoTowerTrainTask(two_tower)
+    ebc = build_ebc(n_users, n_items, args.embed_dim, device=device)
+    two_tower = TwoTower(ebc, layer_sizes=layer_sizes, device=device)
+    model = TwoTowerTrainTask(two_tower)
     state = torch.load("checkpoints/baseline.pt", map_location=device, weights_only=False)
     model.load_state_dict(state, strict=False)
-    optimizer = dl_model.make_optimizer(model, lr=args.lr)
+    optimizer = make_optimizer(model, lr=args.lr)
 
     eval_fn = lambda m: dl_evaluate.evaluate(
         m, test_df, train_df, n_items, n_neg=99, k=10, device=str(device)
@@ -117,8 +118,8 @@ def main():
             model, max_user_id, n_items, args.embed_dim, layer_sizes, str(device)
         )
         print(f"  Retraining surrogate...")
-        surr_task = dl_model.TwoTowerTrainTask(surrogate)
-        surr_optimizer = dl_model.make_optimizer(surr_task, lr=args.lr)
+        surr_task = TwoTowerTrainTask(surrogate)
+        surr_optimizer = make_optimizer(surr_task, lr=args.lr)
         dl_train.train(surr_task, surr_optimizer, poisoned_train, n_items,
                        epochs=args.retrain_epochs, batch_size=2048,
                        device=str(device), eval_fn=None, save_path=None)
@@ -144,8 +145,8 @@ def main():
             max_user_id, n_items, args.embed_dim, layer_sizes, str(device)
         )
         dl_attack._copy_weights_to_plain(model, new_two_tower)
-        model = dl_model.TwoTowerTrainTask(new_two_tower)
-        optimizer = dl_model.make_optimizer(model, lr=args.lr)
+        model = TwoTowerTrainTask(new_two_tower)
+        optimizer = make_optimizer(model, lr=args.lr)
 
         # Step 5: Retrain with EmbdGuard monitoring
         # Thresholds tuned for MovieLens-1M scale (3706 items, ~5M samples/epoch)
@@ -179,7 +180,7 @@ def main():
 
             for start in range(0, n_samples, batch_size):
                 end = min(start + batch_size, n_samples)
-                kjt = dl_model.make_kjt(users[start:end], items[start:end])
+                kjt = make_kjt(users[start:end], items[start:end])
                 batch_labels = labels[start:end]
 
                 with warnings.catch_warnings():

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import torch
 import numpy as np
 
-from dlattack_research.src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
+from src.models import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
 from src.guard import EmbdGuard
 
 

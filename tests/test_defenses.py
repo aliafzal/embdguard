@@ -3,7 +3,7 @@ import pytest
 import torch
 import warnings
 
-from dlattack_research.src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
+from src.models import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt, make_optimizer
 from src.guard import EmbdGuard
 from src.defenses.gradient_clip import GradientClipDefense
 from src.defenses.row_freeze import RowFreezeDefense

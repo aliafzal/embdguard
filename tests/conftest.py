@@ -7,7 +7,7 @@ import torch
 # Add repo root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dlattack_research.src.model import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt
+from src.models import build_ebc, TwoTower, TwoTowerTrainTask, make_kjt
 
 
 @pytest.fixture

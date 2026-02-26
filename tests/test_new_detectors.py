@@ -12,7 +12,7 @@ from src.detectors.temporal_access import TemporalAccessDetector
 
 def _mock_model(n_users=50, n_items=100, emb_dim=16):
     """Create a mock model with accessible embedding weights."""
-    from dlattack_research.src.model import build_ebc, TwoTower, TwoTowerTrainTask
+    from src.models import build_ebc, TwoTower, TwoTowerTrainTask
     ebc = build_ebc(n_users, n_items, emb_dim, device=torch.device("cpu"))
     tt = TwoTower(ebc, layer_sizes=[32, 16], device=torch.device("cpu"))
     return TwoTowerTrainTask(tt)
